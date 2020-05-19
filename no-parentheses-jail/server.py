@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.8
 
 import code
+import os
 import signal
 import sys
 
@@ -11,9 +12,13 @@ def alrm_handler(signum, frame):
 signal.signal(signal.SIGALRM, alrm_handler)
 signal.alarm(60)
 
-def handle_input(line):
-    if '(' in line or ')' in line:
-        return "print('We were pretty clear about no parentheses.')"
+def handle_input(x):
+    line = input(x)
+
+    if line.startswith('exit') or line.startswith('quit'):
+        sys.exit()
+    elif '(' in line or ')' in line:
+        return "'We were pretty clear about no parentheses.'"
 
     return line
 
@@ -34,7 +39,6 @@ Flag is in /flag and can only be read by executing the /readflag binary.
         '__builtins__': {
             'call_me_maybe': os.system,
             'x': X(),
-            'exit': sys.exit
         }
     }
 
@@ -46,7 +50,5 @@ Flag is in /flag and can only be read by executing the /readflag binary.
 
     return 0
 
-
 if __name__ == '__main__':
     sys.exit(main())
-
