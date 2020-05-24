@@ -1,7 +1,7 @@
 # No Parentheses Jail
 
-Solution:
+Deploy with:
 
-```python
-x.__class__.__format__ = call_me_maybe; f'{x:sh}'
+```sh
+sudo deploy.sh 1337
 ```
