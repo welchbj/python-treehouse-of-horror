@@ -1,8 +1,10 @@
 #!/usr/bin/env python3.8
 
 import ast
+import binascii
 import atexit
 import os
+import pickle
 import random
 import shlex
 import signal
@@ -15,70 +17,109 @@ HEX_CHARS = '0123456789abcdef'
 
 def rand_hex():
     return ''.join([
-        random.choice(HEX_CHARS) for _ in range(16)
+        random.choice(HEX_CHARS) for _ in range(32)
     ])
-
-
-ROOT_DIR = os.path.join('/tmp/file-manager-0.1', rand_hex())
-KEYS_DIR = os.path.join(ROOT_DIR, 'keys')
-DATA_DIR = os.path.join(ROOT_DIR, 'data')
 
 
 def run(cmd):
     return subprocess.check_output(cmd, shell=True)
 
 
-class FileStore:
-    def __init__(self):
-        run(f'mkdir -p {ROOT_DIR}')
-        run(f'mkdir -p {KEYS_DIR}')
-        run(f'mkdir -p {DATA_DIR}')
+ROOT_DIR = os.path.join('/tmp/file-manager-0.1', rand_hex())
+KEYS_DIR = os.path.join(ROOT_DIR, 'keys')
+BLOBS_DIR = os.path.join(ROOT_DIR, 'blobs')
+OBJECTS_DIR = os.path.join(ROOT_DIR, 'objects')
+run(f'mkdir -p {ROOT_DIR}')
+run(f'mkdir -p {KEYS_DIR}')
+run(f'mkdir -p {BLOBS_DIR}')
+run(f'mkdir -p {OBJECTS_DIR}')
 
-    def store_literal(self, *args):
-        if len(args) != 2:
-            print('USAGE:   store_literal <NAME> <LITERAL>')
-            print('EXAMPLE: store_literal my_value "[1,2,3]"')
-            return
 
-        name = args[0]
+def _store_data(name, raw_data, _type='blobs'):
+    key_file = os.path.join(KEYS_DIR, name)
+    assert_safe_path(key_file)
+
+    data_dir = os.path.join(ROOT_DIR, _type)
+    data_file = os.path.join(data_dir, rand_hex())
+
+    with open(data_file, 'wb') as f:
+        f.write(raw_data)
+
+    try:
+        os.symlink(data_file, key_file)
+    except Exception:
+        print('ERROR: Unable to create key file symlink')
+
+
+def _retrieve_data(name):
+    key_file = os.path.join(KEYS_DIR, name)
+    assert_safe_path(key_file)
+
+    with open(key_file, 'rb') as f:
+        data = f.read()
+
+    return data
+
+
+def store_object(*args):
+    if len(args) != 2:
+        print('USAGE:   store_object <NAME> <LITERAL>')
+        print('EXAMPLE: store_object my_value "[1,2,3]"')
+        return
+
+    name = args[0]
+    try:
         data = ast.literal_eval(args[1])
+    except Exception:
+        print('ERROR: Unable to parse literal value')
+        return
 
-        key_file = os.path.join(KEYS_DIR, name)
-        data_file = os.path.join(DATA_DIR, rand_hex())
-
-        self.assert_safe_path(key_file)
-
-        with open(data_file, 'w') as f:
-            f.write(str(data))
-
-        try:
-            os.symlink(data_file, key_file)
-        except Exception:
-            print('ERROR: Unable to create key file symlink')
-
-    def retrieve_literal(self, *args):
-        if len(args) != 1:
-            print('USAGE:   retrieve_literal <NAME>')
-            print('EXAMPLE: retrieve_literal my_value')
-            return
-
-        name = args[0]
-        key_file = os.path.join(KEYS_DIR, name)
-
-        self.assert_safe_path(key_file)
-
-        with open(key_file) as f:
-            data = f.read()
-
-        print(eval(data))
-
-    def assert_safe_path(self, path, parent=ROOT_DIR):
-        norm_path = os.path.normpath(path)
-        if not norm_path.startswith(parent):
-            raise ValueError('Nice try, hacker')
+    _store_data(name, pickle.dumps(data), _type='objects')
 
 
-FS = FileStore()
+def retrieve_object(*args):
+    if len(args) != 1:
+        print('USAGE:   retrieve_object <NAME>')
+        print('EXAMPLE: retrieve_object my_value')
+        return
+
+    name = args[0]
+    data = _retrieve_data(name)
+    print(pickle.loads(data))
+
+
+def store_bytes(*args):
+    if len(args) != 2:
+        print('USAGE:   store_bytes <NAME> <HEX_ENCODED_BYTES>')
+        print('EXAMPLE: store_bytes my_value deadbeef')
+        return
+
+    name = args[0]
+    try:
+        data = binascii.unhexlify(args[1])
+    except Exception:
+        print('ERROR: Unable to decode hex')
+        return
+
+    _store_data(name, data, _type='blobs')
+
+
+def retrieve_bytes(*args):
+    if len(args) != 1:
+        print('USAGE:   retrieve_bytes <NAME>')
+        print('EXAMPLE: retrieve_bytes my_value')
+        return
+
+    name = args[0]
+    data = _retrieve_data(name)
+    print(data)
+    print(binascii.hexlify(data).decode())
+
+
+def assert_safe_path(path, parent=ROOT_DIR):
+    norm_path = os.path.normpath(path)
+    if not norm_path.startswith(parent):
+        raise ValueError('Nice try, hacker')
 
 
 def alrm_handler(signum, frame):
@@ -96,8 +137,10 @@ atexit.register(cleanup)
 def main():
     funcs = dict(
         exit=lambda: sys.exit(0),
-        store_literal=FS.store_literal,
-        retrieve_literal=FS.retrieve_literal,
+        store_object=store_object,
+        retrieve_object=retrieve_object,
+        store_bytes=store_bytes,
+        retrieve_bytes=retrieve_bytes,
     )
 
     def print_help(*args):
@@ -113,7 +156,12 @@ def main():
         while True:
             line = input('> ')
 
-            tokens = shlex.split(line)
+            try:
+                tokens = shlex.split(line)
+            except Exception:
+                print('ERROR: Unable to parse arguments')
+                continue
+
             if not tokens:
                 continue
 
@@ -123,6 +171,9 @@ def main():
             funcs.get(func, print_help)(*args)
     except ValueError as e:
         print('ERROR:', e)
+        return 1
+    except FileNotFoundError:
+        print('ERROR: Nice try, hacker')
         return 1
     except (EOFError, KeyboardInterrupt,):
         pass
