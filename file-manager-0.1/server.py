@@ -37,7 +37,7 @@ run(f'mkdir -p {OBJECTS_DIR}')
 
 def _store_data(name, raw_data, _type='blobs'):
     key_file = os.path.join(KEYS_DIR, name)
-    assert_safe_path(key_file)
+    assert_safe_key_file(key_file)
 
     data_dir = os.path.join(ROOT_DIR, _type)
     data_file = os.path.join(data_dir, rand_hex())
@@ -53,7 +53,7 @@ def _store_data(name, raw_data, _type='blobs'):
 
 def _retrieve_data(name):
     key_file = os.path.join(KEYS_DIR, name)
-    assert_safe_path(key_file)
+    assert_safe_key_file(key_file)
 
     with open(key_file, 'rb') as f:
         data = f.read()
@@ -115,10 +115,12 @@ def retrieve_bytes(*args):
     print(binascii.hexlify(data).decode())
 
 
-def assert_safe_path(path, parent=ROOT_DIR):
+def assert_safe_key_file(path, parent=ROOT_DIR):
     norm_path = os.path.normpath(path)
     if not norm_path.startswith(parent):
-        raise ValueError('Nice try, hacker')
+        raise ValueError('Nice try')
+    elif os.path.isfile(norm_path) and not os.path.islink(norm_path):
+        raise ValueError('Wow, good try. But not good enough')
 
 
 def alrm_handler(signum, frame):
@@ -172,7 +174,7 @@ def main():
         print('ERROR:', e)
         return 1
     except FileNotFoundError:
-        print('ERROR: Nice try, hacker')
+        print('ERROR: Nice try')
         return 1
     except (EOFError, KeyboardInterrupt,):
         pass
