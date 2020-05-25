@@ -112,7 +112,6 @@ def retrieve_bytes(*args):
 
     name = args[0]
     data = _retrieve_data(name)
-    print(data)
     print(binascii.hexlify(data).decode())
 
 

