@@ -51,11 +51,15 @@ def _store_data(name, raw_data, _type='blobs'):
         print('ERROR: Unable to create key file symlink')
 
 
-def _retrieve_data(name):
+def _retrieve_data(name, _type='blobs'):
     key_file = os.path.join(KEYS_DIR, name)
     assert_safe_key_file(key_file)
 
-    with open(key_file, 'rb') as f:
+    data_file = os.path.realpath(key_file)
+    parent_dir = BLOBS_DIR if _type == 'blobs' else OBJECTS_DIR
+    assert_safe_data_file(data_file, parent=parent_dir)
+
+    with open(data_file, 'rb') as f:
         data = f.read()
 
     return data
@@ -84,7 +88,7 @@ def retrieve_object(*args):
         return
 
     name = args[0]
-    data = _retrieve_data(name)
+    data = _retrieve_data(name, _type='objects')
     print(pickle.loads(data))
 
 
@@ -111,7 +115,7 @@ def retrieve_bytes(*args):
         return
 
     name = args[0]
-    data = _retrieve_data(name)
+    data = _retrieve_data(name, _type='blobs')
     print(binascii.hexlify(data).decode())
 
 
@@ -121,6 +125,12 @@ def assert_safe_key_file(path, parent=ROOT_DIR):
         raise ValueError('Nice try')
     elif os.path.isfile(norm_path) and not os.path.islink(norm_path):
         raise ValueError('Wow, good try. But not good enough')
+
+
+def assert_safe_data_file(path, parent=ROOT_DIR):
+    norm_path = os.path.normpath(path)
+    if not norm_path.startswith(parent):
+        raise ValueError('Nice try')
 
 
 def alrm_handler(signum, frame):
